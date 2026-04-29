@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,6 +11,19 @@ from .config import client_id
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def extract_qr_data(raw_data: str) -> str:
+    if raw_data.startswith("/j?p="):
+        # Match between !3~ and !4~
+        match = re.search(r"!3~([a-f0-9]+)!4~", raw_data)
+        if match:
+            return match.group(1)
+        # Fallback: if !4~ is missing, take everything after !3~
+        match = re.search(r"!3~([a-f0-9]+)", raw_data)
+        if match:
+            return match.group(1)
+    return raw_data
 
 
 class CheckinPayload(BaseModel):
@@ -29,9 +43,12 @@ async def api_checkin_qr(rollcall_id: int, payload: CheckinPayload):
     logger.info(f"API: Manual QR checkin for rollcall {rollcall_id}")
     if not payload.data:
         raise HTTPException(status_code=400, detail="Missing data field")
-    success, error = await lms_client.do_checkin(
-        rollcall_id, "qr", {"data": payload.data}
-    )
+
+    qr_data = extract_qr_data(payload.data)
+    if qr_data != payload.data:
+        logger.info(f"Extracted real QR data: {qr_data}")
+
+    success, error = await lms_client.do_checkin(rollcall_id, "qr", {"data": qr_data})
     if success:
         rollcalls = await lms_client.get_rollcalls()
         r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
@@ -43,7 +60,7 @@ async def api_checkin_qr(rollcall_id: int, payload: CheckinPayload):
                 "course_id": course_id,
                 "rollcall_id": rollcall_id,
                 "source": "qr",
-                "data": payload.data,
+                "data": qr_data,
             }
         )
         return {"message": "success"}
@@ -81,6 +98,10 @@ async def api_rollcall_qr(payload: CheckinPayload):
     if not payload.data:
         raise HTTPException(status_code=400, detail="Missing data field")
 
+    qr_data = extract_qr_data(payload.data)
+    if qr_data != payload.data:
+        logger.info(f"Extracted real QR data for batch: {qr_data}")
+
     rollcalls = await lms_client.get_rollcalls()
     results = []
 
@@ -88,7 +109,7 @@ async def api_rollcall_qr(payload: CheckinPayload):
         if r.get("source") == "qr" and r.get("status") == "absent":
             rollcall_id = r["rollcall_id"]
             success, error = await lms_client.do_checkin(
-                rollcall_id, "qr", {"data": payload.data}
+                rollcall_id, "qr", {"data": qr_data}
             )
             if success:
                 course_id = r.get("course_id", 0)
@@ -99,7 +120,7 @@ async def api_rollcall_qr(payload: CheckinPayload):
                         "course_id": course_id,
                         "rollcall_id": rollcall_id,
                         "source": "qr",
-                        "data": payload.data,
+                        "data": qr_data,
                     }
                 )
                 results.append({"rollcall_id": rollcall_id, "status": "success"})
