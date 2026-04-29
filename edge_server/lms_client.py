@@ -10,7 +10,7 @@ from .crypto import encrypt_password
 
 logger = logging.getLogger(__name__)
 
-COOKIE_FILE = "cookies.json"
+COOKIE_FILE = os.path.join("data", "cookies.json")
 
 
 class LMSClient:

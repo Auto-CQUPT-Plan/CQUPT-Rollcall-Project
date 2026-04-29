@@ -16,11 +16,28 @@
     ```json
     [
         {
-            "rollcall_id": 772642,
-            "course_title": "高等数学",
+            "avatar_big_url": "http://lms.tc.cqupt.edu.cn:80/api/uploads/1507432/modified-image?thumbnail=200x200&crop_box=422,0,3296,2874",
+            "class_name": "",
+            "course_id": 112459,
+            "course_title": "高等数学（下）英",
+            "created_by": 122219,
+            "created_by_name": "李振坤",
+            "department_name": "国际学院教学办公室",
+            "grade_name": "",
+            "group_set_id": 0,
+            "is_expired": false,
+            "is_number": false,
+            "is_radar": false,
+            "published_at": null,
+            "rollcall_id": 772294,
+            "rollcall_status": "in_progress",
+            "rollcall_time": "2026-04-29T08:07:44Z",
+            "scored": true,
             "source": "qr",
-            "status": "absent",
-            ...
+            "status": "on_call_fine",
+            "student_rollcall_id": 0,
+            "title": "2026.04.29 16:07",
+            "type": "qr_rollcall"
         }
     ]
     ```

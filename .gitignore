@@ -9,9 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# macOS files
 .DS_Store
 
+# Project files
 test
-client_id.txt
-config.json
-cookies.json
+data

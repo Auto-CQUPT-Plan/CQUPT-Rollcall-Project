@@ -6,13 +6,19 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
-CONFIG_FILE = "config.json"
-CLIENT_ID_FILE = "client_id.txt"
+DATA_DIR = "data"
+CONFIG_FILE = os.path.join(DATA_DIR, "config.json")
+CLIENT_ID_FILE = os.path.join(DATA_DIR, "client_id.txt")
+
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
 
 
 class Config(BaseModel):
     username: str
     password: str
+    curriculum_api: str = ""
+    curriculum_pre_minutes: int = 10
     http_port: int = 8080
     center_server_url: str = ""
     auto_location_checkin: bool = False
