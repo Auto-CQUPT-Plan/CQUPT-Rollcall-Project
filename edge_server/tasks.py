@@ -2,6 +2,7 @@ import asyncio
 import logging
 import json
 import os
+import random
 from datetime import datetime, time, timedelta
 from typing import List, Dict, Optional
 
@@ -19,17 +20,166 @@ last_curriculum_fetch: Optional[datetime] = None
 
 
 def get_location_coords(location_name: str) -> Optional[Dict[str, float]]:
-    """
-    TODO: Implement mapping from location names (e.g., '3403', '太极运动场02') to lat/lon.
-    """
-    # Placeholder mapping
-    mapping = {
-        "3403": {"lat": 29.531, "lon": 106.607},
-        "3208": {"lat": 29.5315, "lon": 106.6075},
-        "3211": {"lat": 29.5318, "lon": 106.6072},
-        "太极运动场02": {"lat": 29.532, "lon": 106.608},
+    teaching_building_positions = {
+        "1": {
+            "poiid": "B0JGP7JVZ3",
+            "name": "重庆邮电大学一教学楼",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.605647",
+            "y": "29.531049",
+            "classify": "门牌信息",
+        },
+        "2": {
+            "poiid": "B00170AKOO",
+            "name": "重庆邮电大学老二教学楼",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.606620",
+            "y": "29.532345",
+            "classify": "门牌信息",
+        },
+        "3": {
+            "poiid": "B00170AKOS",
+            "name": "重庆邮电大学第三教学楼",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.609243",
+            "y": "29.535101",
+            "classify": "门牌信息",
+        },
+        "4": {
+            "poiid": "B001793EEX",
+            "name": "重庆邮电大学四教学楼",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.609269",
+            "y": "29.536307",
+            "classify": "门牌信息",
+        },
+        "5": {
+            "poiid": "B0JGP7KB5J",
+            "name": "重庆邮电大学五教学楼",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.610354",
+            "y": "29.536018",
+            "classify": "门牌信息",
+        },
+        "8": {
+            "poiid": "B0MGBUTIQF",
+            "name": "重庆邮电大学第八教学楼",
+            "address": "重庆市南岸区崇文路2号重庆邮电大学内",
+            "telephone": "",
+            "x": "106.611013",
+            "y": "29.534461",
+            "classify": "科教文化场所",
+        },
+        "9": {
+            "poiid": "B0LK6SKEQB",
+            "name": "重庆邮电大学第九教学楼",
+            "address": "重庆市南岸区新市场支路与南山路交叉口东340米",
+            "telephone": "",
+            "x": "106.606189",
+            "y": "29.525971",
+            "classify": "科教文化场所",
+        },
     }
-    return mapping.get(location_name)
+
+    other_building_positions = {
+        "综合实验楼A": {
+            "poiid": "B0JGP7KB5G",
+            "name": "重庆邮电大学综合实验楼A幢",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.605528",
+            "y": "29.525598",
+            "classify": "门牌信息",
+        },
+        "综合实验楼B": {
+            "poiid": "B0FFJ2TSDW",
+            "name": "重庆邮电大学综合实验楼B幢",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.605611",
+            "y": "29.525013",
+            "classify": "门牌信息",
+        },
+        "综合实验楼C": {
+            "poiid": "B0FFH453LD",
+            "name": "重庆邮电大学综合实验楼C幢",
+            "address": "重庆市南岸区南山街道崇文路2号",
+            "telephone": "",
+            "x": "106.605629",
+            "y": "29.524309",
+            "classify": "门牌信息",
+        },
+        "桂花篮球场": {
+            "poiid": "B0HRVODGXX",
+            "name": "重庆邮电大学-桂花篮球场",
+            "address": "重庆市南岸区崇文路2号重庆邮电大学内(三教学楼旁)",
+            "telephone": "",
+            "x": "106.607208",
+            "y": "29.530162",
+            "classify": "运动场馆",
+        },
+        "灯光篮球场": {
+            "poiid": "B0L2LSP7HG",
+            "name": "重庆邮电大学灯光篮球场",
+            "address": "重庆市南岸区重庆邮电大学玉兰园东南侧170米",
+            "telephone": "",
+            "x": "106.608514",
+            "y": "29.532465",
+            "classify": "体育休闲场所",
+        },
+        "风华运动场": {
+            "poiid": "B0JGP7JVZ7",
+            "name": "重庆邮电大学风华运动场",
+            "address": "重庆市南岸区南山街道崇文路2号重庆邮电大学",
+            "telephone": "",
+            "x": "106.607568",
+            "y": "29.532786",
+            "classify": "运动场所",
+        },
+        "太极运动场": {
+            "poiid": "B00170C5ZJ",
+            "name": "重庆邮电大学太极运动场",
+            "address": "重庆市南岸区南山街道崇文路2号重庆邮电大学",
+            "telephone": "",
+            "x": "106.609731",
+            "y": "29.532896",
+            "classify": "运动场所",
+        },
+    }
+
+    target = None
+    # 1. 4位数字地名逻辑：取首位匹配教学楼
+    if location_name.isdigit() and len(location_name) == 4:
+        building_num = location_name[0]
+        target = teaching_building_positions.get(building_num)
+
+    # 2. 关键词包含检测
+    if not target:
+        for keyword, pos in other_building_positions.items():
+            if keyword in location_name:
+                target = pos
+                break
+
+    if target:
+        try:
+            # 数据中的 x 为经度 (lon)，y 为纬度 (lat)
+            base_lon = float(target["x"])
+            base_lat = float(target["y"])
+
+            # 3. 增加一点随机精度 (约 +/- 20米范围)
+            jitter_lat = (random.random() - 0.2) * 0.0008
+            jitter_lon = (random.random() - 0.2) * 0.0008
+
+            return {"lat": base_lat + jitter_lat, "lon": base_lon + jitter_lon}
+        except (ValueError, KeyError):
+            return None
+
+    return None
 
 
 async def load_curriculum_from_file():
