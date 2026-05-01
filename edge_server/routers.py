@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def extract_qr_data(raw_data: str) -> str:
+def extract_qr_data(raw_data: str) -> str | None:
     if raw_data.startswith("/j?p="):
         # Match between !3~ and !4~
         match = re.search(r"!3~([a-f0-9]+)!4~", raw_data)
@@ -26,7 +26,7 @@ def extract_qr_data(raw_data: str) -> str:
         match = re.search(r"!3~([a-f0-9]+)", raw_data)
         if match:
             return match.group(1)
-    return raw_data
+    return None
 
 
 class CheckinPayload(BaseModel):
@@ -48,8 +48,9 @@ async def api_checkin_qr(rollcall_id: int, payload: CheckinPayload):
         raise HTTPException(status_code=400, detail="Missing data field")
 
     qr_data = extract_qr_data(payload.data)
-    if qr_data != payload.data:
-        logger.info(f"Extracted real QR data: {qr_data}")
+    if not qr_data:
+        raise HTTPException(status_code=400, detail="Invalid QR code format")
+    logger.info(f"QR Code Data: {qr_data}")
 
     success, error = await lms_client.do_checkin(rollcall_id, "qr", {"data": qr_data})
     if success:
@@ -111,8 +112,9 @@ async def api_rollcall_qr(payload: CheckinPayload):
         raise HTTPException(status_code=400, detail="Missing data field")
 
     qr_data = extract_qr_data(payload.data)
-    if qr_data != payload.data:
-        logger.info(f"Extracted real QR data for batch: {qr_data}")
+    if not qr_data:
+        raise HTTPException(status_code=400, detail="Invalid QR code format")
+    logger.info(f"QR Code Data: {qr_data}")
 
     rollcalls = await lms_client.get_rollcalls()
     results = []
