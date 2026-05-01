@@ -8,7 +8,7 @@ from typing import List, Dict, Optional
 
 from .config import client_id, config
 from .lms_client import lms_client
-from .center_ws import send_to_center
+
 
 logger = logging.getLogger(__name__)
 
@@ -283,11 +283,13 @@ def should_poll() -> bool:
     return False
 
 
-def get_current_course_instance() -> Optional[Dict]:
+def get_current_course_instance(
+    check_time: Optional[datetime] = None,
+) -> Optional[Dict]:
     """Find the course instance that is currently active or about to start."""
     if not curriculum_data:
         return None
-    now_dt = datetime.now()
+    now_dt = check_time or datetime.now()
     today_str = now_dt.strftime("%Y-%m-%d")
     instances = curriculum_data.get("instances", [])
     for inst in instances:
@@ -307,7 +309,26 @@ def get_current_course_instance() -> Optional[Dict]:
     return None
 
 
+def get_course_location_for_rollcall(r: Dict) -> Optional[str]:
+    rt_str = r.get("rollcall_time")
+    if not rt_str:
+        return None
+    try:
+        if rt_str.endswith("Z"):
+            rt_str = rt_str[:-1] + "+00:00"
+        rt_utc = datetime.fromisoformat(rt_str)
+        rt_local = rt_utc.astimezone(timezone(timedelta(hours=8)))
+        inst = get_current_course_instance(rt_local)
+        if inst:
+            return inst.get("location")
+    except Exception:
+        pass
+    return None
+
+
 async def polling_task():
+    from .center_ws import send_to_center
+
     global poll_trigger_event
     if poll_trigger_event is None:
         poll_trigger_event = asyncio.Event()
@@ -324,78 +345,79 @@ async def polling_task():
             # 2. Check if we should poll in this time slot
             if should_poll():
                 rollcalls = await lms_client.get_rollcalls()
-                if rollcalls:
-                    logger.info(
-                        f"Polling: Found {len(rollcalls)} active rollcalls. Sharing with center..."
-                    )
-                    has_qr = any(
-                        r.get("source") == "qr" and r.get("status") == "absent"
-                        for r in rollcalls
-                    )
-                    numbers = [
-                        r["rollcall_id"]
-                        for r in rollcalls
-                        if r.get("source") == "number" and r.get("status") == "absent"
-                    ]
-                    await send_to_center(
-                        {
-                            "type": "rollcall_tasks",
-                            "client_id": client_id,
-                            "rollcall_qr": has_qr,
-                            "rollcall_number": numbers,
-                            "timestamp": datetime.now(timezone.utc).strftime(
-                                "%Y-%m-%dT%H:%M:%SZ"
-                            ),
-                        }
-                    )
+                logger.info(
+                    f"Polling: Found {len(rollcalls)} active rollcalls. Sharing with center..."
+                )
+                has_qr = any(
+                    r.get("source") == "qr" and r.get("status") == "absent"
+                    for r in rollcalls
+                )
+                numbers = [
+                    {
+                        "rollcall_id": r["rollcall_id"],
+                        "course_title": r.get("course_title", ""),
+                        "course_location": get_course_location_for_rollcall(r),
+                    }
+                    for r in rollcalls
+                    if r.get("source") == "number" and r.get("status") == "absent"
+                ]
+                await send_to_center(
+                    {
+                        "type": "rollcall_tasks",
+                        "client_id": client_id,
+                        "rollcall_qr": has_qr,
+                        "rollcall_number": numbers,
+                        "timestamp": datetime.now(timezone.utc).strftime(
+                            "%Y-%m-%dT%H:%M:%SZ"
+                        ),
+                    }
+                )
 
-                    # 3. Auto Radar Check-in
-                    if config.curriculum_api and config.auto_location_checkin:
-                        # Index course by current time instead of matching name
-                        current_inst = get_current_course_instance()
-                        if current_inst:
-                            for r in rollcalls:
-                                if (
-                                    r.get("source") == "radar"
-                                    and r.get("status") == "absent"
-                                ):
-                                    # Basic verification: check if names match too, or just trust time?
-                                    # Usually better to trust time but log if names differ
-                                    if r.get("course_title") != current_inst.get(
-                                        "course"
-                                    ):
-                                        logger.warning(
-                                            f"Auto-radar: Time match found '{current_inst.get('course')}' but rollcall is '{r.get('course_title')}'"
+                # 3. Auto Radar Check-in
+                if config.curriculum_api and config.auto_location_checkin:
+                    # Index course by current time instead of matching name
+                    current_inst = get_current_course_instance()
+                    if current_inst:
+                        for r in rollcalls:
+                            if (
+                                r.get("source") == "radar"
+                                and r.get("status") == "absent"
+                            ):
+                                # Basic verification: check if names match too, or just trust time?
+                                # Usually better to trust time but log if names differ
+                                if r.get("course_title") != current_inst.get("course"):
+                                    logger.warning(
+                                        f"Auto-radar: Time match found '{current_inst.get('course')}' but rollcall is '{r.get('course_title')}'"
+                                    )
+
+                                location = current_inst.get("location")
+                                if location:
+                                    coords = get_location_coords(location)
+                                    if coords:
+                                        logger.info(
+                                            f"Auto-radar: Time-indexed course '{current_inst['course']}' at '{location}'. Attempting check-in..."
                                         )
-
-                                    location = current_inst.get("location")
-                                    if location:
-                                        coords = get_location_coords(location)
-                                        if coords:
+                                        (
+                                            success,
+                                            error,
+                                        ) = await lms_client.do_checkin(
+                                            r["rollcall_id"], "radar", coords
+                                        )
+                                        if success:
                                             logger.info(
-                                                f"Auto-radar: Time-indexed course '{current_inst['course']}' at '{location}'. Attempting check-in..."
+                                                f"Auto-radar check-in successful for {r['course_title']}"
                                             )
-                                            (
-                                                success,
-                                                error,
-                                            ) = await lms_client.do_checkin(
-                                                r["rollcall_id"], "radar", coords
-                                            )
-                                            if success:
-                                                logger.info(
-                                                    f"Auto-radar check-in successful for {r['course_title']}"
-                                                )
-                                            else:
-                                                logger.warning(
-                                                    f"Auto-radar check-in failed for {r['course_title']}: {error}"
-                                                )
                                         else:
                                             logger.warning(
-                                                f"Auto-radar: No coordinates found for location '{location}'"
+                                                f"Auto-radar check-in failed for {r['course_title']}: {error}"
                                             )
-                        else:
-                            # If no course in curriculum but rollcalls exist, we don't have location
-                            pass
+                                    else:
+                                        logger.warning(
+                                            f"Auto-radar: No coordinates found for location '{location}'"
+                                        )
+                    else:
+                        # If no course in curriculum but rollcalls exist, we don't have location
+                        pass
 
             else:
                 # logger.debug("Outside polling windows. Skipping...")

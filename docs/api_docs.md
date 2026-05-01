@@ -103,7 +103,13 @@
     "type": "rollcall_tasks",
     "client_id": "uuid-v4-string",
     "rollcall_qr": true,
-    "rollcall_number": [772294],
+    "rollcall_number": [
+        {
+            "rollcall_id": 772294,
+            "course_title": "高等数学（下）英",
+            "course_location": "3202"
+        }
+    ],
     "timestamp": "2026-05-01T12:52:24Z"
 }
 ```
@@ -126,6 +132,8 @@
     "type": "rollcall_success",
     "client_id": "uuid-v4-string",
     "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
     "rollcall_id": 772294,
     "rollcall_number": 1234,
     "timestamp": "2026-05-01T12:52:24Z"
@@ -150,6 +158,8 @@
     "type": "rollcall_share",
     "from_client_id": "source-uuid",
     "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
     "rollcall_id": 772294,
     "rollcall_number": 1234,
     "timestamp": "2026-05-01T12:52:24Z"
@@ -177,6 +187,8 @@
     "from_client_id": "source-uuid",
     "client_id": "my-uuid",
     "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
     "rollcall_id": 772294,
     "rollcall_number": 1234,
     "valid": false,

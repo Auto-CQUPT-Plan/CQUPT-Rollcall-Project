@@ -16,11 +16,13 @@ ws_connection: Optional[websockets.ClientConnection] = None
 
 async def send_to_center(message: dict):
     global ws_connection
-    if ws_connection and not ws_connection.closed:
-        try:
-            await ws_connection.send(json.dumps(message))
-        except Exception as e:
-            logger.error(f"Failed to send to center server: {e}")
+    if not ws_connection:
+        return
+    try:
+        logger.debug(f"Sending to center: {message}")
+        await ws_connection.send(json.dumps(message))
+    except Exception as e:
+        logger.error(f"Failed to send to center server: {e}")
 
 
 async def ws_loop():
@@ -31,9 +33,10 @@ async def ws_loop():
         try:
             async with websockets.connect(config.center_server_url) as ws:
                 ws_connection = ws
-                logger.info("Connected to center server")
+                logger.info("Connected to center server, sending register message")
                 await ws.send(json.dumps({"type": "register", "client_id": client_id}))
                 async for message in ws:
+                    logger.info(f"Received from center: {message}")
                     data = json.loads(message)
                     if data.get("type") == "rollcall_share":
                         c_type = data.get("rollcall_type")
@@ -73,6 +76,8 @@ async def ws_loop():
                         elif c_type == "number":
                             r_id = data.get("rollcall_id")
                             c_num = data.get("rollcall_number")
+                            course_title = data.get("course_title", "")
+                            course_location = data.get("course_location", None)
                             r = next(
                                 (r for r in rollcalls if r.get("rollcall_id") == r_id),
                                 None,
@@ -91,6 +96,8 @@ async def ws_loop():
                                     "from_client_id": from_client_id,
                                     "client_id": client_id,
                                     "rollcall_type": "number",
+                                    "course_title": course_title,
+                                    "course_location": course_location,
                                     "rollcall_id": r_id,
                                     "rollcall_number": c_num,
                                     "valid": success,

@@ -9,7 +9,7 @@ from .lms_client import lms_client
 from .center_ws import send_to_center
 from .config import client_id
 from datetime import datetime, timezone
-from .tasks import trigger_poll
+from .tasks import trigger_poll, get_course_location_for_rollcall
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +79,18 @@ async def api_checkin_number(rollcall_id: int, payload: CheckinPayload):
         rollcall_id, "number", {"numberCode": payload.numberCode}
     )
     if success:
+        rollcalls = await lms_client.get_rollcalls()
+        r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
+        course_title = r["course_title"] if r else ""
+        course_location = get_course_location_for_rollcall(r) if r else None
         asyncio.create_task(
             send_to_center(
                 {
                     "type": "rollcall_success",
                     "client_id": client_id,
                     "rollcall_type": "number",
+                    "course_title": course_title,
+                    "course_location": course_location,
                     "rollcall_id": rollcall_id,
                     "rollcall_number": int(payload.numberCode),
                     "timestamp": datetime.now(timezone.utc).strftime(
