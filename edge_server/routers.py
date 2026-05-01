@@ -4,26 +4,19 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import asyncio
 from .lms_client import lms_client
 from .center_ws import send_to_center
 from .config import client_id
+from datetime import datetime, timezone
+from .tasks import trigger_poll, get_course_location_for_rollcall
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
 
-def extract_qr_data(raw_data: str) -> str:
-    if raw_data.startswith("/j?p="):
-        # Match between !3~ and !4~
-        match = re.search(r"!3~([a-f0-9]+)!4~", raw_data)
-        if match:
-            return match.group(1)
-        # Fallback: if !4~ is missing, take everything after !3~
-        match = re.search(r"!3~([a-f0-9]+)", raw_data)
-        if match:
-            return match.group(1)
-    return raw_data
+from .utils import extract_qr_data
 
 
 class CheckinPayload(BaseModel):
@@ -45,24 +38,26 @@ async def api_checkin_qr(rollcall_id: int, payload: CheckinPayload):
         raise HTTPException(status_code=400, detail="Missing data field")
 
     qr_data = extract_qr_data(payload.data)
-    if qr_data != payload.data:
-        logger.info(f"Extracted real QR data: {qr_data}")
+    if not qr_data:
+        raise HTTPException(status_code=400, detail="Invalid QR code format")
+    logger.info(f"QR Code Data: {qr_data}")
 
     success, error = await lms_client.do_checkin(rollcall_id, "qr", {"data": qr_data})
     if success:
-        rollcalls = await lms_client.get_rollcalls()
-        r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
-        course_id = r["course_id"] if r else 0
-        await send_to_center(
-            {
-                "type": "checkin_data",
-                "client_id": client_id,
-                "course_id": course_id,
-                "rollcall_id": rollcall_id,
-                "source": "qr",
-                "data": qr_data,
-            }
+        asyncio.create_task(
+            send_to_center(
+                {
+                    "type": "rollcall_success",
+                    "client_id": client_id,
+                    "rollcall_type": "qr",
+                    "rollcall_data": qr_data,
+                    "timestamp": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+            )
         )
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)
 
@@ -77,17 +72,25 @@ async def api_checkin_number(rollcall_id: int, payload: CheckinPayload):
     if success:
         rollcalls = await lms_client.get_rollcalls()
         r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
-        course_id = r["course_id"] if r else 0
-        await send_to_center(
-            {
-                "type": "checkin_data",
-                "client_id": client_id,
-                "course_id": course_id,
-                "rollcall_id": rollcall_id,
-                "source": "number",
-                "data": payload.numberCode,
-            }
+        course_title = r["course_title"] if r else ""
+        course_location = get_course_location_for_rollcall(r) if r else None
+        asyncio.create_task(
+            send_to_center(
+                {
+                    "type": "rollcall_success",
+                    "client_id": client_id,
+                    "rollcall_type": "number",
+                    "course_title": course_title,
+                    "course_location": course_location,
+                    "rollcall_id": rollcall_id,
+                    "rollcall_number": int(payload.numberCode),
+                    "timestamp": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+            )
         )
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)
 
@@ -99,8 +102,9 @@ async def api_rollcall_qr(payload: CheckinPayload):
         raise HTTPException(status_code=400, detail="Missing data field")
 
     qr_data = extract_qr_data(payload.data)
-    if qr_data != payload.data:
-        logger.info(f"Extracted real QR data for batch: {qr_data}")
+    if not qr_data:
+        raise HTTPException(status_code=400, detail="Invalid QR code format")
+    logger.info(f"QR Code Data: {qr_data}")
 
     rollcalls = await lms_client.get_rollcalls()
     results = []
@@ -112,17 +116,20 @@ async def api_rollcall_qr(payload: CheckinPayload):
                 rollcall_id, "qr", {"data": qr_data}
             )
             if success:
-                course_id = r.get("course_id", 0)
-                await send_to_center(
-                    {
-                        "type": "checkin_data",
-                        "client_id": client_id,
-                        "course_id": course_id,
-                        "rollcall_id": rollcall_id,
-                        "source": "qr",
-                        "data": qr_data,
-                    }
+                asyncio.create_task(
+                    send_to_center(
+                        {
+                            "type": "rollcall_success",
+                            "client_id": client_id,
+                            "rollcall_type": "qr",
+                            "rollcall_data": qr_data,
+                            "timestamp": datetime.now(timezone.utc).strftime(
+                                "%Y-%m-%dT%H:%M:%SZ"
+                            ),
+                        }
+                    )
                 )
+                trigger_poll()
                 results.append({"rollcall_id": rollcall_id, "status": "success"})
             else:
                 results.append(
@@ -139,5 +146,6 @@ async def api_checkin_location(rollcall_id: int, payload: CheckinPayload):
     data = {"lat": payload.lat, "lon": payload.lon}
     success, error = await lms_client.do_checkin(rollcall_id, "radar", data)
     if success:
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)

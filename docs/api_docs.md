@@ -96,37 +96,102 @@
 { "type": "register", "client_id": "uuid-v4-string" }
 ```
 
-### 2.2 共享待签到 (Share Rollcalls)
-每 30 秒，边缘端若检测到有待签到任务，会同步给中心服务端，以便其他节点可见。
+### 2.2 共享待签到任务 (Rollcall Tasks)
+每隔30s，或在边缘服务端检测到有未签到任务时，边缘端向中心服务端发送签到任务列表，格式如下：
 ```json
 {
-  "type": "share_rollcalls",
-  "client_id": "...",
-  "rollcalls": [...]
+    "type": "rollcall_tasks",
+    "client_id": "uuid-v4-string",
+    "rollcall_qr": true,
+    "rollcall_number": [
+        {
+            "rollcall_id": 772294,
+            "course_title": "高等数学（下）英",
+            "course_location": "3202"
+        }
+    ],
+    "timestamp": "2026-05-01T12:52:24Z"
 }
 ```
 
-### 2.3 提交签到负载 (Checkin Data)
-当边缘端完成本地签到后，会将成功的“答案”（二维码内容或数字）共享给中心，由中心下发给其他拥有该课程的同学。
+### 2.3 提交签到负载 (Rollcall Success)
+当边缘端有用户通过 HTTP 方式完成本地签到后，会主动向中心服务端发送成功的“答案”（二维码内容或数字）。
+**二维码签到**:
 ```json
 {
-  "type": "checkin_data",
-  "client_id": "...",
-  "course_id": 12345,
-  "rollcall_id": 67890,
-  "source": "qr",
-  "data": "..."
+    "type": "rollcall_success",
+    "client_id": "uuid-v4-string",
+    "rollcall_type": "qr",
+    "rollcall_data": "qr_code_string_here",
+    "timestamp": "2026-05-01T12:52:24Z"
+}
+```
+**数字签到**:
+```json
+{
+    "type": "rollcall_success",
+    "client_id": "uuid-v4-string",
+    "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
+    "rollcall_id": 772294,
+    "rollcall_number": 1234,
+    "timestamp": "2026-05-01T12:52:24Z"
 }
 ```
 
-### 2.4 下发签到指令 (Do Checkin)
-中心服务端根据收到的负载，向特定的边缘端发送签到指令。
+### 2.4 接收共享签到 (Rollcall Share)
+中心服务端根据收到的签到负载，向有对应类型签到需求的边缘端广播签到指令。
+**二维码签到**:
 ```json
 {
-  "type": "do_checkin",
-  "rollcall_id": 67890,
-  "source": "qr",
-  "data": "..."
+    "type": "rollcall_share",
+    "from_client_id": "source-uuid",
+    "rollcall_type": "qr",
+    "rollcall_qr_data": "qr_code_string_here",
+    "timestamp": "2026-05-01T12:52:24Z"
 }
 ```
-*注：边缘端收到后会先验证本地该 rollcall 是否确实处于 absent 状态才执行。*
+**数字签到**:
+```json
+{
+    "type": "rollcall_share",
+    "from_client_id": "source-uuid",
+    "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
+    "rollcall_id": 772294,
+    "rollcall_number": 1234,
+    "timestamp": "2026-05-01T12:52:24Z"
+}
+```
+
+### 2.5 反馈签到结果 (Rollcall Share Verification)
+边缘服务端接收到 `rollcall_share` 并尝试签到后，会向中心服务端反馈验证结果，并同步最新的 `rollcall_tasks`。
+**二维码签到反馈**:
+```json
+{
+    "type": "rollcall_share_verification",
+    "from_client_id": "source-uuid",
+    "client_id": "my-uuid",
+    "rollcall_type": "qr",
+    "rollcall_qr_data": "qr_code_string_here",
+    "valid": true,
+    "timestamp": "2026-05-01T12:52:24Z"
+}
+```
+**数字签到反馈**:
+```json
+{
+    "type": "rollcall_share_verification",
+    "from_client_id": "source-uuid",
+    "client_id": "my-uuid",
+    "rollcall_type": "number",
+    "course_title": "高等数学（下）英",
+    "course_location": "3202",
+    "rollcall_id": 772294,
+    "rollcall_number": 1234,
+    "valid": false,
+    "timestamp": "2026-05-01T12:52:24Z"
+}
+```
