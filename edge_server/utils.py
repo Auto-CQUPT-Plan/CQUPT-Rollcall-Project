@@ -1,4 +1,5 @@
 import re
+import time
 
 
 def extract_qr_data(raw_data: str) -> str | None:
@@ -24,6 +25,11 @@ def extract_qr_data(raw_data: str) -> str | None:
 
     # Validation: must be exactly 42 hexadecimal characters (10-digit timestamp + 32-digit hash)
     if re.match(r"^[a-f0-9]{42}$", data, re.IGNORECASE):
-        return data
+        try:
+            ts = int(data[:10])
+            if time.time() - ts <= 15:
+                return data
+        except Exception:
+            pass
 
     return None
