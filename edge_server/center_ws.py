@@ -3,9 +3,11 @@ import json
 import logging
 import websockets
 from typing import Optional
+from datetime import datetime, timezone
 
 from .config import config, client_id
 from .lms_client import lms_client
+from .tasks import trigger_poll
 
 logger = logging.getLogger(__name__)
 
@@ -33,28 +35,69 @@ async def ws_loop():
                 await ws.send(json.dumps({"type": "register", "client_id": client_id}))
                 async for message in ws:
                     data = json.loads(message)
-                    if data.get("type") == "do_checkin":
-                        r_id = data.get("rollcall_id")
-                        c_type = data.get("source")
-                        c_data = data.get("data")
+                    if data.get("type") == "rollcall_share":
+                        c_type = data.get("rollcall_type")
+                        from_client_id = data.get("from_client_id")
 
-                        # Validate we have this rollcall
                         rollcalls = await lms_client.get_rollcalls()
-                        r = next(
-                            (r for r in rollcalls if r["rollcall_id"] == r_id), None
-                        )
-                        if r and r["status"] == "absent":
-                            payload = {}
-                            if c_type == "qr":
-                                payload["data"] = c_data
-                            elif c_type == "number":
-                                payload["numberCode"] = c_data
+                        success = False
 
-                            success, error = await lms_client.do_checkin(
-                                r_id, c_type, payload
+                        if c_type == "qr":
+                            c_data = data.get("rollcall_qr_data")
+                            for r in rollcalls:
+                                if (
+                                    r.get("source") == "qr"
+                                    and r.get("status") == "absent"
+                                ):
+                                    s, err = await lms_client.do_checkin(
+                                        r["rollcall_id"], "qr", {"data": c_data}
+                                    )
+                                    if s:
+                                        success = True
+
+                            trigger_poll()
+                            await send_to_center(
+                                {
+                                    "type": "rollcall_share_verification",
+                                    "from_client_id": from_client_id,
+                                    "client_id": client_id,
+                                    "rollcall_type": "qr",
+                                    "rollcall_qr_data": c_data,
+                                    "valid": success,
+                                    "timestamp": datetime.now(timezone.utc).strftime(
+                                        "%Y-%m-%dT%H:%M:%SZ"
+                                    ),
+                                }
                             )
-                            logger.info(
-                                f"Center triggered checkin {r_id} ({c_type}): {'Success' if success else f'Failed ({error})'}"
+
+                        elif c_type == "number":
+                            r_id = data.get("rollcall_id")
+                            c_num = data.get("rollcall_number")
+                            r = next(
+                                (r for r in rollcalls if r.get("rollcall_id") == r_id),
+                                None,
+                            )
+                            if r and r.get("status") == "absent":
+                                s, err = await lms_client.do_checkin(
+                                    r_id, "number", {"numberCode": str(c_num)}
+                                )
+                                if s:
+                                    success = True
+
+                            trigger_poll()
+                            await send_to_center(
+                                {
+                                    "type": "rollcall_share_verification",
+                                    "from_client_id": from_client_id,
+                                    "client_id": client_id,
+                                    "rollcall_type": "number",
+                                    "rollcall_id": r_id,
+                                    "rollcall_number": c_num,
+                                    "valid": success,
+                                    "timestamp": datetime.now(timezone.utc).strftime(
+                                        "%Y-%m-%dT%H:%M:%SZ"
+                                    ),
+                                }
                             )
         except Exception as e:
             logger.error(f"WebSocket error: {e}")

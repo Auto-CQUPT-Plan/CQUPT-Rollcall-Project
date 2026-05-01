@@ -3,7 +3,7 @@ import logging
 import json
 import os
 import random
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import List, Dict, Optional
 
 from .config import client_id, config
@@ -17,6 +17,12 @@ CURRICULUM_CACHE_FILE = os.path.join("data", "curriculum_cache.json")
 # Global cache for curriculum
 curriculum_data: Optional[Dict] = None
 last_curriculum_fetch: Optional[datetime] = None
+poll_trigger_event: Optional[asyncio.Event] = None
+
+
+def trigger_poll():
+    if poll_trigger_event:
+        poll_trigger_event.set()
 
 
 def get_location_coords(location_name: str) -> Optional[Dict[str, float]]:
@@ -302,6 +308,10 @@ def get_current_course_instance() -> Optional[Dict]:
 
 
 async def polling_task():
+    global poll_trigger_event
+    if poll_trigger_event is None:
+        poll_trigger_event = asyncio.Event()
+
     # Initial load
     await load_curriculum_from_file()
 
@@ -318,11 +328,24 @@ async def polling_task():
                     logger.info(
                         f"Polling: Found {len(rollcalls)} active rollcalls. Sharing with center..."
                     )
+                    has_qr = any(
+                        r.get("source") == "qr" and r.get("status") == "absent"
+                        for r in rollcalls
+                    )
+                    numbers = [
+                        r["rollcall_id"]
+                        for r in rollcalls
+                        if r.get("source") == "number" and r.get("status") == "absent"
+                    ]
                     await send_to_center(
                         {
-                            "type": "share_rollcalls",
+                            "type": "rollcall_tasks",
                             "client_id": client_id,
-                            "rollcalls": rollcalls,
+                            "rollcall_qr": has_qr,
+                            "rollcall_number": numbers,
+                            "timestamp": datetime.now(timezone.utc).strftime(
+                                "%Y-%m-%dT%H:%M:%SZ"
+                            ),
                         }
                     )
 
@@ -381,4 +404,8 @@ async def polling_task():
         except Exception as e:
             logger.error(f"Polling task error: {e}")
 
-        await asyncio.sleep(30)
+        try:
+            await asyncio.wait_for(poll_trigger_event.wait(), timeout=30)
+            poll_trigger_event.clear()
+        except asyncio.TimeoutError:
+            pass

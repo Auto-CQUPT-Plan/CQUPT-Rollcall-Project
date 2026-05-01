@@ -4,9 +4,12 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+import asyncio
 from .lms_client import lms_client
 from .center_ws import send_to_center
 from .config import client_id
+from datetime import datetime, timezone
+from .tasks import trigger_poll
 
 logger = logging.getLogger(__name__)
 
@@ -50,19 +53,20 @@ async def api_checkin_qr(rollcall_id: int, payload: CheckinPayload):
 
     success, error = await lms_client.do_checkin(rollcall_id, "qr", {"data": qr_data})
     if success:
-        rollcalls = await lms_client.get_rollcalls()
-        r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
-        course_id = r["course_id"] if r else 0
-        await send_to_center(
-            {
-                "type": "checkin_data",
-                "client_id": client_id,
-                "course_id": course_id,
-                "rollcall_id": rollcall_id,
-                "source": "qr",
-                "data": qr_data,
-            }
+        asyncio.create_task(
+            send_to_center(
+                {
+                    "type": "rollcall_success",
+                    "client_id": client_id,
+                    "rollcall_type": "qr",
+                    "rollcall_data": qr_data,
+                    "timestamp": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+            )
         )
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)
 
@@ -75,19 +79,21 @@ async def api_checkin_number(rollcall_id: int, payload: CheckinPayload):
         rollcall_id, "number", {"numberCode": payload.numberCode}
     )
     if success:
-        rollcalls = await lms_client.get_rollcalls()
-        r = next((x for x in rollcalls if x["rollcall_id"] == rollcall_id), None)
-        course_id = r["course_id"] if r else 0
-        await send_to_center(
-            {
-                "type": "checkin_data",
-                "client_id": client_id,
-                "course_id": course_id,
-                "rollcall_id": rollcall_id,
-                "source": "number",
-                "data": payload.numberCode,
-            }
+        asyncio.create_task(
+            send_to_center(
+                {
+                    "type": "rollcall_success",
+                    "client_id": client_id,
+                    "rollcall_type": "number",
+                    "rollcall_id": rollcall_id,
+                    "rollcall_number": int(payload.numberCode),
+                    "timestamp": datetime.now(timezone.utc).strftime(
+                        "%Y-%m-%dT%H:%M:%SZ"
+                    ),
+                }
+            )
         )
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)
 
@@ -112,17 +118,20 @@ async def api_rollcall_qr(payload: CheckinPayload):
                 rollcall_id, "qr", {"data": qr_data}
             )
             if success:
-                course_id = r.get("course_id", 0)
-                await send_to_center(
-                    {
-                        "type": "checkin_data",
-                        "client_id": client_id,
-                        "course_id": course_id,
-                        "rollcall_id": rollcall_id,
-                        "source": "qr",
-                        "data": qr_data,
-                    }
+                asyncio.create_task(
+                    send_to_center(
+                        {
+                            "type": "rollcall_success",
+                            "client_id": client_id,
+                            "rollcall_type": "qr",
+                            "rollcall_data": qr_data,
+                            "timestamp": datetime.now(timezone.utc).strftime(
+                                "%Y-%m-%dT%H:%M:%SZ"
+                            ),
+                        }
+                    )
                 )
+                trigger_poll()
                 results.append({"rollcall_id": rollcall_id, "status": "success"})
             else:
                 results.append(
@@ -139,5 +148,6 @@ async def api_checkin_location(rollcall_id: int, payload: CheckinPayload):
     data = {"lat": payload.lat, "lon": payload.lon}
     success, error = await lms_client.do_checkin(rollcall_id, "radar", data)
     if success:
+        trigger_poll()
         return {"message": "success"}
     raise HTTPException(status_code=400, detail=error)
