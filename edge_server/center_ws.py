@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from .config import config, client_id
 from .lms_client import lms_client
 from .tasks import trigger_poll
+from .utils import extract_qr_data
 
 logger = logging.getLogger(__name__)
 
@@ -46,17 +47,26 @@ async def ws_loop():
                         success = False
 
                         if c_type == "qr":
-                            c_data = data.get("rollcall_qr_data")
-                            for r in rollcalls:
-                                if (
-                                    r.get("source") == "qr"
-                                    and r.get("status") == "absent"
-                                ):
-                                    s, err = await lms_client.do_checkin(
-                                        r["rollcall_id"], "qr", {"data": c_data}
-                                    )
-                                    if s:
-                                        success = True
+                            raw_qr_data = data.get("rollcall_qr_data")
+                            c_data = extract_qr_data(raw_qr_data)
+
+                            if not c_data:
+                                logger.warning(
+                                    f"Received invalid QR data from center: {raw_qr_data}"
+                                )
+                                # Still send verification with valid=False
+                                success = False
+                            else:
+                                for r in rollcalls:
+                                    if (
+                                        r.get("source") == "qr"
+                                        and r.get("status") == "absent"
+                                    ):
+                                        s, err = await lms_client.do_checkin(
+                                            r["rollcall_id"], "qr", {"data": c_data}
+                                        )
+                                        if s:
+                                            success = True
 
                             trigger_poll()
                             await send_to_center(

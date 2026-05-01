@@ -16,17 +16,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-def extract_qr_data(raw_data: str) -> str | None:
-    if raw_data.startswith("/j?p="):
-        # Match between !3~ and !4~
-        match = re.search(r"!3~([a-f0-9]+)!4~", raw_data)
-        if match:
-            return match.group(1)
-        # Fallback: if !4~ is missing, take everything after !3~
-        match = re.search(r"!3~([a-f0-9]+)", raw_data)
-        if match:
-            return match.group(1)
-    return None
+from .utils import extract_qr_data
 
 
 class CheckinPayload(BaseModel):
