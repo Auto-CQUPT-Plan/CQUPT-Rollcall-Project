@@ -91,12 +91,26 @@
 通信格式: JSON
 
 ### 2.1 注册 (Register)
-连接成功后，边缘端主动发送本地持久化的 UUID。
+连接成功后，边缘端主动发送本地持久化的 UUID 和可选的 Secret。
 ```json
-{ "type": "register", "client_id": "uuid-v4-string" }
+{ 
+    "type": "register", 
+    "client_id": "uuid-v4-string",
+    "secret": "your_secret_here"
+}
+```
+*   **secret**: 可选。如果中心服务端配置了密钥，则必须提供匹配的密钥才能注册成功。
+
+### 2.2 错误响应 (Error)
+如果注册失败或发生其他错误，中心服务端会返回错误消息并断开 WebSocket 连接。
+```json
+{
+    "type": "error",
+    "message": "Invalid secret"
+}
 ```
 
-### 2.2 共享待签到任务 (Rollcall Tasks)
+### 2.3 共享待签到任务 (Rollcall Tasks)
 每隔30s，或在边缘服务端检测到有未签到任务时，边缘端向中心服务端发送签到任务列表，格式如下：
 ```json
 {
@@ -114,7 +128,7 @@
 }
 ```
 
-### 2.3 提交签到负载 (Rollcall Success)
+### 2.4 提交签到负载 (Rollcall Success)
 当边缘端有用户通过 HTTP 方式完成本地签到后，会主动向中心服务端发送成功的“答案”（二维码内容或数字）。
 **二维码签到**:
 ```json
@@ -140,7 +154,7 @@
 }
 ```
 
-### 2.4 接收共享签到 (Rollcall Share)
+### 2.5 接收共享签到 (Rollcall Share)
 中心服务端根据收到的签到负载，向有对应类型签到需求的边缘端广播签到指令。
 **二维码签到**:
 ```json
@@ -166,7 +180,7 @@
 }
 ```
 
-### 2.5 反馈签到结果 (Rollcall Share Verification)
+### 2.6 反馈签到结果 (Rollcall Share Verification)
 边缘服务端接收到 `rollcall_share` 并尝试签到后，会向中心服务端反馈验证结果，并同步最新的 `rollcall_tasks`。
 **二维码签到反馈**:
 ```json
