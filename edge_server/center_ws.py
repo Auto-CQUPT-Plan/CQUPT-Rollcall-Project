@@ -52,7 +52,15 @@ async def ws_loop():
             async with websockets.connect(config.center_server_url) as ws:
                 ws_connection = ws
                 logger.info("Connected to center server, sending register message")
-                await ws.send(json.dumps({"type": "register", "client_id": client_id}))
+                await ws.send(
+                    json.dumps(
+                        {
+                            "type": "register",
+                            "client_id": client_id,
+                            "secret": config.center_server_secret,
+                        }
+                    )
+                )
                 trigger_poll()
                 async for message in ws:
                     logger.info(f"Received from center: {message}")

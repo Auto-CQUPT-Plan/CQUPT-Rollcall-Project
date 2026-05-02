@@ -21,6 +21,7 @@ class Config(BaseModel):
     curriculum_pre_minutes: int = 10
     http_port: int = 8080
     center_server_url: str = ""
+    center_server_secret: str = ""
     auto_location_checkin: bool = False
 
 
