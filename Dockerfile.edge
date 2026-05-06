@@ -1,0 +1,21 @@
+# Use an official Python runtime as a parent image
+FROM python:3.11-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Copy the requirements file from the edge_server directory
+COPY edge_server/requirements.txt .
+
+# Install dependencies
+RUN pip install -i https://mirrors.tuna.tsinghua.edu.cn/pypi/web/simple --no-cache-dir -r requirements.txt
+
+# Copy the entire project code
+# We need the root level files (edge_main.py) and the edge_server package
+COPY . .
+
+# Ensure the data directory exists for persistence
+RUN mkdir -p /app/data
+
+# Run the application using edge_main.py
+CMD ["python", "edge_main.py"]
