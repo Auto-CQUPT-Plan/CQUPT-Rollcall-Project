@@ -75,6 +75,8 @@ async def ws_loop():
                         if c_type == "qr":
                             raw_qr_data = data.get("rollcall_qr_data")
                             cache_key = f"qr:{raw_qr_data}"
+                            tried = False
+                            c_data = None
 
                             if is_in_invalid_cache(cache_key):
                                 logger.info(
@@ -90,7 +92,6 @@ async def ws_loop():
                                     add_to_invalid_cache(cache_key)
                                     success = False
                                 else:
-                                    tried = False
                                     for r in rollcalls:
                                         if (
                                             r.get("source") == "qr"
@@ -106,6 +107,9 @@ async def ws_loop():
                                     if tried and not success:
                                         # Only cache as invalid if we actually tried and failed
                                         add_to_invalid_cache(cache_key)
+
+                            if not tried:
+                                continue
 
                             trigger_poll()
                             await send_to_center(
@@ -129,6 +133,7 @@ async def ws_loop():
                             course_location = data.get("course_location", None)
 
                             cache_key = f"num:{r_id}:{c_num}"
+                            tried = False
 
                             if is_in_invalid_cache(cache_key):
                                 logger.info(
@@ -145,6 +150,7 @@ async def ws_loop():
                                     None,
                                 )
                                 if r and r.get("status") == "absent":
+                                    tried = True
                                     s, err = await lms_client.do_checkin(
                                         r_id, "number", {"numberCode": str(c_num)}
                                     )
@@ -155,6 +161,9 @@ async def ws_loop():
                                 else:
                                     # Not in our tasks or already signed in
                                     success = False
+
+                            if not tried:
+                                continue
 
                             trigger_poll()
                             await send_to_center(
