@@ -1,0 +1,18 @@
+services:
+  edge-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.edge
+    container_name: cqupt-rollcall-edge
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - EDGE_USERNAME=your_username
+      - EDGE_PASSWORD=your_password
+      - EDGE_CENTER_SERVER_URL=ws://center-server:8000/ws
+      - EDGE_CENTER_SERVER_SECRET=your_secret
+      - EDGE_HTTP_PORT=8080
+      - EDGE_AUTO_LOCATION_CHECKIN=false
+    volumes:
+      - ./data:/app/data

@@ -1,0 +1,13 @@
+.git
+.DS_Store
+__pycache__
+*.pyc
+.venv
+data/*.json
+data/*.txt
+data/*.db
+center_server
+test
+docs
+uv.lock
+pyproject.toml
