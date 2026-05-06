@@ -23,7 +23,7 @@ class Config(BaseModel):
     http_port: Optional[int] = 8080
     center_server_url: str = ""
     center_server_secret: str = ""
-    auto_location_checkin: bool = False
+    auto_location_checkin: bool = True
 
 
 def load_config() -> Config:
