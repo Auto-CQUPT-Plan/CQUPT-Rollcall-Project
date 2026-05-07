@@ -133,36 +133,38 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     client_id = "unknown"
     try:
-        data = await websocket.receive_json()
-        print(f"Received initial message: {data}")
-        if data.get("type") == "register":
-            # Verify secret
-            client_id = data.get("client_id", "unknown")
-            client_secret = data.get("secret", "")
+        # Registration phase
+        try:
+            data = await websocket.receive_json()
+            print(f"Received initial message: {data}")
+            if data.get("type") == "register":
+                # Verify secret
+                client_id = data.get("client_id", "unknown")
+                client_secret = data.get("secret", "")
 
-            if not await verify_secret(client_secret, client_id):
-                print(f"Registration failed: Invalid secret from {client_id}")
+                if not await verify_secret(client_secret, client_id):
+                    print(f"Registration failed: Invalid secret from {client_id}")
+                    await websocket.send_json(
+                        {"type": "error", "message": "Invalid secret"}
+                    )
+                    await websocket.close()
+                    return
+
+                await manager.connect(websocket, client_id)
+                print(f"Client {client_id} registered successfully")
+            else:
+                print("Registration failed: First message must be register")
                 await websocket.send_json(
-                    {"type": "error", "message": "Invalid secret"}
+                    {"type": "error", "message": "Registration required"}
                 )
                 await websocket.close()
                 return
-
-            await manager.connect(websocket, client_id)
-            print(f"Client {client_id} registered successfully")
-        else:
-            print("Registration failed: First message must be register")
-            await websocket.send_json(
-                {"type": "error", "message": "Registration required"}
-            )
+        except Exception as e:
+            print(f"Error during registration: {e}")
             await websocket.close()
             return
-    except Exception as e:
-        print(f"Error during registration: {e}")
-        await websocket.close()
-        return
 
-    try:
+        # Message loop phase
         while True:
             data = await websocket.receive_json()
             print(f"Received message from {client_id}: {data}")
@@ -198,8 +200,12 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 # Cache and check number tasks
                 numbers = data.get("rollcall_number", [])
+                if not isinstance(numbers, list):
+                    numbers = []
                 for task in numbers:
                     r_id = task.get("rollcall_id")
+                    if r_id is None:
+                        continue
                     title = task.get("course_title", "")
                     loc = task.get("course_location", None)
                     if r_id not in number_tasks:
@@ -238,7 +244,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     qr_str = data.get("rollcall_data") or data.get(
                         "rollcall_qr_data", ""
                     )
-                    sender_id = data.get("client_id", "unknown")
+                    sender_id = data.get("client_id", client_id)
 
                     if update_qr_data(qr_str):
                         qr_success_clients.add(sender_id)
@@ -275,7 +281,7 @@ async def websocket_endpoint(websocket: WebSocket):
                     await manager.broadcast(
                         {
                             "type": "rollcall_share",
-                            "from_client_id": data.get("client_id", "unknown"),
+                            "from_client_id": data.get("client_id", client_id),
                             "rollcall_type": "number",
                             "course_title": title,
                             "course_location": loc,
@@ -286,9 +292,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     )
 
     except WebSocketDisconnect:
+        print(f"Client {client_id} disconnected")
+    except Exception as e:
+        print(f"Error in websocket loop for {client_id}: {e}")
+    finally:
         manager.disconnect(websocket)
-        qr_needing_clients.discard(client_id)
-        qr_success_clients.discard(client_id)
+        if client_id not in manager.active_connections.values():
+            qr_needing_clients.discard(client_id)
+            qr_success_clients.discard(client_id)
 
 
 @app.websocket("/api/rollcall/ws/status")
