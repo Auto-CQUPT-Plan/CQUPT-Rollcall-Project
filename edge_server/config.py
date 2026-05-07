@@ -114,3 +114,4 @@ def get_client_id() -> str:
 
 config = load_config()
 client_id = get_client_id()
+runtime_state = {"pause_shared_rollcall": False}

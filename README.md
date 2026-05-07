@@ -109,6 +109,7 @@
 
 ## 📖 更多文档
 
+- [边缘服务端部署教程](docs/edge_deployment.md)
 - [接口与通信协议说明](docs/api_docs.md)
 
 ## 🤝 贡献

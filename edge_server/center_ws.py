@@ -6,7 +6,7 @@ import websockets
 from typing import Optional, Dict
 from datetime import datetime, timezone
 
-from .config import config, client_id
+from .config import config, client_id, runtime_state
 from .lms_client import lms_client
 from .tasks import trigger_poll
 from .utils import extract_qr_data
@@ -66,6 +66,12 @@ async def ws_loop():
                     logger.info(f"Received from center: {message}")
                     data = json.loads(message)
                     if data.get("type") == "rollcall_share":
+                        if runtime_state.get("pause_shared_rollcall", False):
+                            logger.info(
+                                "Ignoring shared rollcall because pause is enabled"
+                            )
+                            continue
+
                         c_type = data.get("rollcall_type")
                         from_client_id = data.get("from_client_id")
 
