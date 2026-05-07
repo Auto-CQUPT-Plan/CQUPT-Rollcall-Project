@@ -10,6 +10,7 @@ from .center_ws import send_to_center
 from .config import client_id
 from datetime import datetime, timezone
 from .tasks import trigger_poll, get_course_location_for_rollcall
+from .config import runtime_state
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,21 @@ class CheckinPayload(BaseModel):
     numberCode: Optional[str] = None
     lat: Optional[float] = None
     lon: Optional[float] = None
+
+
+class PausePayload(BaseModel):
+    pause: bool
+
+
+@router.get("/pause_shared")
+async def get_pause_shared():
+    return {"pause": runtime_state.get("pause_shared_rollcall", False)}
+
+
+@router.post("/pause_shared")
+async def set_pause_shared(payload: PausePayload):
+    runtime_state["pause_shared_rollcall"] = payload.pause
+    return {"message": "success", "pause": runtime_state["pause_shared_rollcall"]}
 
 
 @router.get("/rollcalls")
